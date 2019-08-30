@@ -26,7 +26,7 @@ from nnutils import *
 
 
 class Generator(nn.Module):
-    def __init__(self, params):
+    def __init__(self, params, is_sub_pixel=False):
         super(Generator, self).__init__()
 
         # Initialize model parameters
@@ -34,28 +34,58 @@ class Generator(nn.Module):
         self.gen_feature_dims = params['ngf']
         self.num_channels = params['nc']
 
-        self.model = nn.Sequential(
-            # input is z, going into a conv layer
-            nn.ConvTranspose2d(self.z_dims, self.gen_feature_dims * 8, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(self.gen_feature_dims * 8),
-            nn.ReLU(True),
-            # state size. (ngf*8) x 4 x 4
-            nn.ConvTranspose2d(self.gen_feature_dims * 8, self.gen_feature_dims * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(self.gen_feature_dims * 4),
-            nn.ReLU(True),
-            # state size. (ngf*4) x 8 x 8,
-            nn.ConvTranspose2d(self.gen_feature_dims * 4, self.gen_feature_dims * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(self.gen_feature_dims * 2),
-            nn.ReLU(True),
-            # state size. (ngf*2) x 16 x 16
-            nn.ConvTranspose2d(self.gen_feature_dims * 2, self.gen_feature_dims, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(self.gen_feature_dims),
-            nn.ReLU(True),
-            # state size. (ngf) x 32 x 32
-            nn.ConvTranspose2d(self.gen_feature_dims, self.num_channels, 4, 2, 1, bias=False),
-            nn.Tanh()
-            # state size. (nc) x 64 x 64
-        )
+        if not is_sub_pixel:
+            self.model = nn.Sequential(
+                # input is z, going into a conv layer
+                nn.ConvTranspose2d(self.z_dims, self.gen_feature_dims * 8, 4, 1, 0, bias=False),
+                nn.BatchNorm2d(self.gen_feature_dims * 8),
+                nn.ReLU(True),
+                # state size. (ngf*8) x 4 x 4
+                nn.ConvTranspose2d(self.gen_feature_dims * 8, self.gen_feature_dims * 4, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(self.gen_feature_dims * 4),
+                nn.ReLU(True),
+                # state size. (ngf*4) x 8 x 8,
+                nn.ConvTranspose2d(self.gen_feature_dims * 4, self.gen_feature_dims * 2, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(self.gen_feature_dims * 2),
+                nn.ReLU(True),
+                # state size. (ngf*2) x 16 x 16
+                nn.ConvTranspose2d(self.gen_feature_dims * 2, self.gen_feature_dims, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(self.gen_feature_dims),
+                nn.ReLU(True),
+                # state size. (ngf) x 32 x 32
+                nn.ConvTranspose2d(self.gen_feature_dims, self.num_channels, 4, 2, 1, bias=False),
+                nn.Tanh()
+                # state size. (nc) x 64 x 64
+            )
+        else:
+            self.model = nn.Sequential(
+                # input is z, going into a conv layer
+                nn.Conv2d(self.z_dims, self.gen_feature_dims * 8 * 4, 4, 1, 0, bias=False),
+                nn.PixelShuffle(2),
+                nn.BatchNorm2d(self.gen_feature_dims * 8),
+                nn.ReLU(True),
+                # state size. (ngf*8) x 4 x 4
+                nn.Conv2d(self.gen_feature_dims * 8, self.gen_feature_dims * 4 * 4, 4, 2, 1, bias=False),
+                nn.PixelShuffle(2),
+                nn.BatchNorm2d(self.gen_feature_dims * 4),
+                nn.ReLU(True),
+                # state size. (ngf*4) x 8 x 8,
+                nn.Conv2d(self.gen_feature_dims * 4, self.gen_feature_dims * 2 * 4, 4, 2, 1, bias=False),
+                nn.PixelShuffle(2),
+                nn.BatchNorm2d(self.gen_feature_dims * 2),
+                nn.ReLU(True),
+                # state size. (ngf*2) x 16 x 16
+                nn.Conv2d(self.gen_feature_dims * 2, self.gen_feature_dims * 4, 4, 2, 1, bias=False),
+                nn.PixelShuffle(2),
+                nn.BatchNorm2d(self.gen_feature_dims),
+                nn.ReLU(True),
+                # state size. (ngf) x 32 x 32
+                nn.Conv2d(self.gen_feature_dims, self.num_channels * 4, 4, 2, 1, bias=False),
+                nn.PixelShuffle(2),
+                nn.Tanh()
+                # state size. (nc) x 64 x 64
+            )
+
 
     
     def forward(self, x):
@@ -100,11 +130,73 @@ class VGG16_Discriminator(nn.Module):
     def __init__(self, params):
         super(VGG16_Discriminator, self).__init__()
 
-        vgg16 = vgg16_bn(True)
-        self.model = vgg16.features[:40]
+        # vgg16 = vgg16_bn(True)
+        # self.model = vgg16.features[:40]
+        # self.model = nn.Sequential(
+        #     self.model,
+        #     nn.Conv2d(params['ndf'] * 8, 1, 4, 1, 0, bias=False),
+        #     nn.Sigmoid()
+        # )
+
+        # Initialize model parameters
+        self.dis_feature_dims = params['ndf']
+        self.num_channels = params['nc']
+
         self.model = nn.Sequential(
-            self.model,
-            nn.Conv2d(params['ndf'] * 8, 1, 4, 1, 0, bias=False),
+            # input is (nc) x 64 x 64
+            nn.Conv2d(self.num_channels, self.dis_feature_dims, 3, 1, 1, bias=False),
+            nn.BatchNorm2d(self.dis_feature_dims),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf) x 64 x 64
+            nn.Conv2d(self.dis_feature_dims, self.dis_feature_dims, 3, 2, 1, bias=False),
+            nn.BatchNorm2d(self.dis_feature_dims),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf) x 32 x 32
+            nn.Conv2d(self.dis_feature_dims, self.dis_feature_dims * 2, 3, 1, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 2) x 32 x 32
+            nn.Conv2d(self.dis_feature_dims * 2, self.dis_feature_dims * 2, 3, 2, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 2) x 16 x 16
+            nn.Conv2d(self.dis_feature_dims * 2, self.dis_feature_dims * 4, 3, 1, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 4),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 4) x 16 x 16
+            nn.Conv2d(self.dis_feature_dims * 4, self.dis_feature_dims * 4, 3, 1, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 4),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 4) x 16 x 16
+            nn.Conv2d(self.dis_feature_dims * 4, self.dis_feature_dims * 4, 3, 2, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 4),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 4) x 8 x 8
+            nn.Conv2d(self.dis_feature_dims * 4, self.dis_feature_dims * 8, 3, 1, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 8) x 8 x 8
+            nn.Conv2d(self.dis_feature_dims * 8, self.dis_feature_dims * 8, 3, 1, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 8) x 8 x 8
+            nn.Conv2d(self.dis_feature_dims * 8, self.dis_feature_dims * 8, 3, 2, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 8) x 4 x 4
+            nn.Conv2d(self.dis_feature_dims * 8, self.dis_feature_dims * 8, 3, 1, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 8) x 4 x 4
+            nn.Conv2d(self.dis_feature_dims * 8, self.dis_feature_dims * 8, 3, 2, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 8) x 2 x 2
+            nn.Conv2d(self.dis_feature_dims * 8, self.dis_feature_dims * 8, 3, 1, 1),
+            nn.BatchNorm2d(self.dis_feature_dims * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            # state size. (ndf * 8) x 2 x 2
+            nn.Conv2d(self.dis_feature_dims * 8, 1, 2, 1, 0, bias=False),
             nn.Sigmoid()
         )
 
@@ -127,7 +219,7 @@ class DCGAN():
         self.device = torch.device(device_gpu if (torch.cuda.is_available()) else "cpu")
 
         # Create generator
-        self.netG = Generator(params).to(self.device)
+        self.netG = Generator(params, is_sub_pixel=True).to(self.device)
 
         # Apply the weights_init function to randomly initialize all weights
         # to mean=0, stdev=0.2.
@@ -136,7 +228,7 @@ class DCGAN():
         print('\n==============Generator=============\n', self.netG)
 
         # Create disciminator
-        self.netD = VGG16_Discriminator(params).to(self.device)
+        self.netD = Discriminator(params).to(self.device)
         # Apply the weights_init function to randomly initialize all weights
         # to mean=0, stdev=0.2.
         self.netD.apply(weights_init)
@@ -286,11 +378,11 @@ class DCGAN():
                 D_losses.append(errD.item())
 
                 # Check how the generator is doing by saving G's output on fixed_noise
-                if (iters % 100 == 0) or ((epoch == self.hparams['num_epochs']-1) and (i == len(dataloader)-1)):
+                if (iters % 500 == 0) or ((epoch == self.hparams['num_epochs']-1) and (i == len(dataloader)-1)):
                     with torch.no_grad():
                         fake = self.netG(fixed_noise).detach().cpu()
-                    img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
-                    latent_img_list.append(vutils.make_grid(self.__latent_to_image(fixed_noise), padding=2, normalize=True))
+                    # img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
+                    # latent_img_list.append(vutils.make_grid(self.__latent_to_image(fixed_noise), padding=2, normalize=True))
 
                     img = self.__fake_noise_img_creator(fixed_noise[:8], fake[:8])
                     summwriter.add_image('Images', vutils.make_grid(img, padding=2, normalize=True), iters)
@@ -325,6 +417,7 @@ class DCGAN():
 
 
 
+
 if __name__ == "__main__":
     # Set random seem for reproducibility
     manualSeed = 999
@@ -340,14 +433,14 @@ if __name__ == "__main__":
     params = {
         'dataroot': "data", # Root directory for dataset
         'workers': 0, # Number of workers for dataloader
-        'batch_size': 128, # Batch size during training
+        'batch_size': 64, # Batch size during training
         'image_size': 64, # Spatial size of training images. All images will be resized to this
                         # size using a transformer.
         'nc': 3, # Number of channels in the training images. For color images this is 3
         'nz': 40, # Size of z latent vector (i.e. size of generator input)
         'ngf': 64, # Size of feature maps in generator
         'ndf': 64, # Size of feature maps in discriminator
-        'num_epochs': 1, # Number of training epochs
+        'num_epochs': 10, # Number of training epochs
         'lr': 0.0002, # Learning rate for optimizers
         'beta1': 0.5, # Beta1 hyperparam for Adam optimizers
         'gpu': '0' # Number of GPUs available. Use 0 for CPU mode.
