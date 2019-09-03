@@ -19,9 +19,6 @@ import matplotlib.animation as animation
 
 from torch.utils.tensorboard import SummaryWriter
 
-import sys
-sys.path.append('D:\\workspace\\python\\style-transfer')
-
 from nnutils import *
 
 
@@ -60,33 +57,39 @@ class Generator(nn.Module):
         else:
             self.model = nn.Sequential(
                 # input is z, going into a conv layer
-                nn.Conv2d(self.z_dims, self.gen_feature_dims * 8 * 4, 4, 1, 0, bias=False),
+                nn.ConvTranspose2d(self.z_dims, self.gen_feature_dims * 8, 4, 1, 0, bias=False),
+                nn.Conv2d(self.gen_feature_dims * 8, self.gen_feature_dims * 8 * 4, 3, 2, 1, bias=False),
                 nn.PixelShuffle(2),
                 nn.BatchNorm2d(self.gen_feature_dims * 8),
                 nn.ReLU(True),
                 # state size. (ngf*8) x 4 x 4
-                nn.Conv2d(self.gen_feature_dims * 8, self.gen_feature_dims * 4 * 4, 4, 2, 1, bias=False),
+                nn.ConvTranspose2d(self.gen_feature_dims * 8, self.gen_feature_dims * 4, 4, 2, 1, bias=False),
+                nn.Conv2d(self.gen_feature_dims * 4, self.gen_feature_dims * 4 * 4, 3, 2, 1, bias=False),
                 nn.PixelShuffle(2),
                 nn.BatchNorm2d(self.gen_feature_dims * 4),
                 nn.ReLU(True),
                 # state size. (ngf*4) x 8 x 8,
-                nn.Conv2d(self.gen_feature_dims * 4, self.gen_feature_dims * 2 * 4, 4, 2, 1, bias=False),
+                nn.ConvTranspose2d(self.gen_feature_dims * 4, self.gen_feature_dims * 2, 4, 2, 1, bias=False),
+                nn.Conv2d(self.gen_feature_dims * 2, self.gen_feature_dims * 2 * 4, 3, 2, 1, bias=False),
                 nn.PixelShuffle(2),
                 nn.BatchNorm2d(self.gen_feature_dims * 2),
                 nn.ReLU(True),
                 # state size. (ngf*2) x 16 x 16
-                nn.Conv2d(self.gen_feature_dims * 2, self.gen_feature_dims * 4, 4, 2, 1, bias=False),
+                nn.ConvTranspose2d(self.gen_feature_dims * 2, self.gen_feature_dims, 4, 2, 1, bias=False),
+                nn.Conv2d(self.gen_feature_dims * 1, self.gen_feature_dims * 1 * 4, 3, 2, 1, bias=False),
                 nn.PixelShuffle(2),
                 nn.BatchNorm2d(self.gen_feature_dims),
                 nn.ReLU(True),
                 # state size. (ngf) x 32 x 32
-                nn.Conv2d(self.gen_feature_dims, self.num_channels * 4, 4, 2, 1, bias=False),
+                # nn.Conv2d(self.gen_feature_dims, self.num_channels * 4, 4, 2, 1, bias=False),
+                # nn.PixelShuffle(2),
+                nn.ConvTranspose2d(self.gen_feature_dims, self.num_channels, 4, 2, 1, bias=False),
+                nn.Conv2d(self.num_channels, self.num_channels * 4, 3, 2, 1, bias=False),
                 nn.PixelShuffle(2),
                 nn.Tanh()
                 # state size. (nc) x 64 x 64
             )
-
-
+    
     
     def forward(self, x):
         return self.model(x)
@@ -129,14 +132,6 @@ class Discriminator(nn.Module):
 class VGG16_Discriminator(nn.Module):
     def __init__(self, params):
         super(VGG16_Discriminator, self).__init__()
-
-        # vgg16 = vgg16_bn(True)
-        # self.model = vgg16.features[:40]
-        # self.model = nn.Sequential(
-        #     self.model,
-        #     nn.Conv2d(params['ndf'] * 8, 1, 4, 1, 0, bias=False),
-        #     nn.Sigmoid()
-        # )
 
         # Initialize model parameters
         self.dis_feature_dims = params['ndf']
@@ -275,15 +270,11 @@ class DCGAN():
         # the progression of the generator
         fixed_noise = torch.randn(64, self.hparams['nz'], 1, 1, device=self.device)
 
-        # print(fixed_noise.size())
-        # img = self.__latent_to_image(fixed_noise)
-        # print(img.size())
-
         for i, data in enumerate(self.dataloader, 0):
-            summwriter.add_graph(model=Generator(self.hparams), input_to_model=torch.zeros(1, self.hparams['nz'], 1, 1))
-            summwriter.add_graph(model=Discriminator(self.hparams), input_to_model=torch.zeros(
-                1, self.hparams['nc'], self.hparams['image_size'], self.hparams['image_size']
-            ))
+            # summwriter.add_graph(model=Generator(self.hparams), input_to_model=torch.zeros(1, self.hparams['nz'], 1, 1))
+            # summwriter.add_graph(model=Discriminator(self.hparams), input_to_model=torch.zeros(
+            #     1, self.hparams['nc'], self.hparams['image_size'], self.hparams['image_size']
+            # ))
             break
 
         real_label = 1
@@ -367,11 +358,11 @@ class DCGAN():
                         % (epoch, self.hparams['num_epochs'], i, len(self.dataloader),\
                         errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
-                summwriter.add_scalar('Loss_D', errD.item(), i)
-                summwriter.add_scalar('Loss_G', errG.item(), i)
-                summwriter.add_scalar('D(x)', D_x, i)
-                summwriter.add_scalar('D(x)', D_G_z1, i)
-                summwriter.add_histogram('Noise Distribution', noise, i)
+                # summwriter.add_scalar('Loss_D', errD.item(), i)
+                # summwriter.add_scalar('Loss_G', errG.item(), i)
+                # summwriter.add_scalar('D(x)', D_x, i)
+                # summwriter.add_scalar('D(x)', D_G_z1, i)
+                # summwriter.add_histogram('Noise Distribution', noise, i)
 
                 # Save losses for plotting later
                 G_losses.append(errG.item())
@@ -385,7 +376,8 @@ class DCGAN():
                     # latent_img_list.append(vutils.make_grid(self.__latent_to_image(fixed_noise), padding=2, normalize=True))
 
                     img = self.__fake_noise_img_creator(fixed_noise[:8], fake[:8])
-                    summwriter.add_image('Images', vutils.make_grid(img, padding=2, normalize=True), iters)
+                    img_list.append(vutils.make_grid(img, padding=2, normalize=True))
+                    # summwriter.add_image('Images', vutils.make_grid(img, padding=2, normalize=True), iters)
                     # summwriter.add_image('Generated Images', img_list[-1])
                     # summwriter.add_image('Noise Images', latent_img_list[-1])
 
@@ -412,8 +404,8 @@ class DCGAN():
         Writer = animation.writers['ffmpeg']
         writer = Writer(fps=5, metadata=dict(artist='Me'), bitrate=1800)
 
-        ani.save('im.mp4', writer=writer)
-        summwriter.close()
+        ani.save('sub_pix_res.mp4', writer=writer)
+        # summwriter.close()
 
 
 
@@ -428,12 +420,10 @@ if __name__ == "__main__":
 
     is_show_samples = False
 
-    # writer = SummaryWriter('logs/face_gen/')
-
     params = {
         'dataroot': "data", # Root directory for dataset
-        'workers': 0, # Number of workers for dataloader
-        'batch_size': 64, # Batch size during training
+        'workers': 4, # Number of workers for dataloader
+        'batch_size': 256, # Batch size during training
         'image_size': 64, # Spatial size of training images. All images will be resized to this
                         # size using a transformer.
         'nc': 3, # Number of channels in the training images. For color images this is 3
